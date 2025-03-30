@@ -7,6 +7,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
@@ -88,9 +89,41 @@ func UploadToS3(region, profile, fileName, bucket, folder string) error {
 
 // NewAWSSession creates a new AWS session
 func NewAWSSession(region, profile string) (*session.Session, error) {
+	// First try to use environment variables if they exist
+	if hasEnvCredentials() {
+		fmt.Println("Using AWS credentials from environment variables")
+		return session.NewSession(&aws.Config{
+			Region: aws.String(region),
+			Credentials: credentials.NewStaticCredentialsFromCreds(credentials.Value{
+				AccessKeyID:     os.Getenv("AWS_ACCESS_KEY_ID"),
+				SecretAccessKey: os.Getenv("AWS_SECRET_ACCESS_KEY"),
+				SessionToken:    os.Getenv("AWS_SESSION_TOKEN"),
+			}),
+		})
+	}
+
+	// Fallback to profile-based credentials
+	fmt.Printf("Using AWS credentials from profile: %s\n", profile)
 	return session.NewSessionWithOptions(session.Options{
 		Config:            aws.Config{Region: aws.String(region)},
 		Profile:           profile,
 		SharedConfigState: session.SharedConfigEnable,
 	})
+}
+
+// hasEnvCredentials checks if all required AWS credentials are present in environment variables
+func hasEnvCredentials() bool {
+	requiredEnvVars := []string{
+		"AWS_ACCESS_KEY_ID",
+		"AWS_SECRET_ACCESS_KEY",
+		"AWS_SESSION_TOKEN",
+	}
+
+	for _, envVar := range requiredEnvVars {
+		if os.Getenv(envVar) == "" {
+			fmt.Println("AWS env credentials not fully set, falling back to profile")
+			return false
+		}
+	}
+	return true
 }
